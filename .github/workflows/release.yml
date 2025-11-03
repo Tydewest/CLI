@@ -1,5 +1,9 @@
 name: Build & Release Dynaserve
 
+# Give the workflow permission to write contents (tags & releases)
+permissions:
+  contents: write
+
 on:
   push:
     branches:
@@ -10,12 +14,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout full repo + tags
+      # 1️⃣ Checkout full repo + tags, allow pushing tags
       - name: Checkout
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0  # Fetch all history and tags
-          ref: Release     # Ensure we're on Release branch
+          fetch-depth: 0           # Fetch all history + tags
+          ref: Release             # Make sure we are on Release branch
+          persist-credentials: true # Needed to push tags and commits
 
       # 2️⃣ Install build tools
       - name: Install dependencies
@@ -28,7 +33,7 @@ jobs:
           LATEST_TAG=$(git describe --tags --abbrev=0 || echo "0.0.0")
           echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
 
-      # 4️⃣ Determine version bump from commit messages since latest tag
+      # 4️⃣ Determine version bump from commit messages
       - id: version_bump
         run: |
           COMMITS=$(git log $(git describe --tags --abbrev=0)..HEAD --pretty=%s)
@@ -78,7 +83,7 @@ jobs:
           SHA256=$(shasum -a 256 bin/dynaserve | awk '{print $1}')
           echo "sha256=$SHA256" >> $GITHUB_OUTPUT
 
-      # 8️⃣ Generate release installer with correct SHA256
+      # 8️⃣ Generate release installer with embedded SHA256 and version
       - run: |
           cp install.sh install_release.sh
           sed -i.bak "s/INSERT_SHA256_HERE/${{ steps.checksum.outputs.sha256 }}/" install_release.sh
