@@ -1,29 +1,29 @@
 name: Build & Release Dynaserve
 
-# Give the workflow permission to write contents (tags & releases)
 permissions:
-  contents: write
+  contents: write  # allow creating tags and releases
 
 on:
-  push:
+  pull_request:
     branches:
-      - Release  # Trigger on merges to Release branch
+      - Release
+    types: [closed] # only run when PR is merged
 
 jobs:
   release:
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout full repo + tags, allow pushing tags
+      # 1️⃣ Checkout repo
       - name: Checkout
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0           # Fetch all history + tags
-          ref: Release             # Make sure we are on Release branch
-          persist-credentials: true # Needed to push tags and commits
+          fetch-depth: 0
+          persist-credentials: true
 
-      # 2️⃣ Install build tools
-      - name: Install dependencies
+      # 2️⃣ Install dependencies
+      - name: Install build tools
         run: sudo apt-get update && sudo apt-get install -y build-essential curl git
 
       # 3️⃣ Get latest tag
@@ -89,22 +89,13 @@ jobs:
           sed -i.bak "s/INSERT_SHA256_HERE/${{ steps.checksum.outputs.sha256 }}/" install_release.sh
           sed -i.bak "s/LATEST/${{ steps.next_version.outputs.next_tag }}/" install_release.sh
 
-      # 9️⃣ Tag release
-      - run: |
-          git tag ${{ steps.next_version.outputs.next_tag }}
-          git push origin ${{ steps.next_version.outputs.next_tag }}
-
-      # 🔟 Create GitHub release
-      - uses: softprops/action-gh-release@v1
+      # 9️⃣ Create GitHub release and upload assets
+      - name: Create Release & Upload Assets
+        uses: ncipollo/release-action@v1
         with:
-          tag_name: ${{ steps.next_version.outputs.next_tag }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # 1️⃣1️⃣ Upload release assets
-      - uses: softprops/action-gh-release@v1
-        with:
-          files: |
+          tag: ${{ steps.next_version.outputs.next_tag }}
+          name: Dynaserve ${{ steps.next_version.outputs.next_tag }}
+          artifacts: |
             bin/dynaserve
             install_release.sh
         env:
