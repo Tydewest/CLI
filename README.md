@@ -1,6 +1,6 @@
 # Dynaserve CLI
 
-⚡ **Dynaserve** is a lightweight, cross-platform command-line interface (CLI) tool for managing and running your Dynaserve service. Designed for **macOS and Linux**, it provides quick commands, auto-update notifications, and a user-friendly interface...
+⚡ **Dynaserve** is a lightweight, cross-platform command-line interface (CLI) tool for managing and running your Dynaserve service. Designed for **macOS and Linux**, it provides quick commands, auto-update notifications, and a user-friendly interface.
 
 ---
 
