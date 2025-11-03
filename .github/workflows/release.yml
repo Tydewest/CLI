@@ -26,6 +26,13 @@ jobs:
         run: |
           make
       
+      - name: List compiled binaries
+        run: |
+          echo "Files in current directory:"
+          ls -lah
+          echo "Executable files:"
+          find . -type f -executable -ls
+      
       - name: Determine version bump
         id: version_bump
         run: |
@@ -85,6 +92,6 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            mycli
+            dynaserve
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
