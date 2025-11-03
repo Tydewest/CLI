@@ -32,4 +32,4 @@
 **One-line installer (recommended):**
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/Tydewest/CLI/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/Tydewest/CLI/Production/install.sh | bash
