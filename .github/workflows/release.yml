@@ -3,18 +3,23 @@ name: Build & Release Dynaserve
 on:
   push:
     branches:
-      - Release  # Trigger on merges to release branch
+      - Release  # Trigger on merges to Release branch
 
 jobs:
   release:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout
-      - uses: actions/checkout@v3
+      # 1️⃣ Checkout full repo + tags
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Fetch all history and tags
+          ref: Release     # Ensure we're on Release branch
 
-      # 2️⃣ Install dependencies
-      - run: sudo apt-get update && sudo apt-get install -y build-essential curl git
+      # 2️⃣ Install build tools
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential curl git
 
       # 3️⃣ Get latest tag
       - id: get_tag
@@ -23,11 +28,14 @@ jobs:
           LATEST_TAG=$(git describe --tags --abbrev=0 || echo "0.0.0")
           echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
 
-      # 4️⃣ Determine version bump based on commit messages
+      # 4️⃣ Determine version bump from commit messages since latest tag
       - id: version_bump
         run: |
-          COMMITS=$(git log origin/release..HEAD --pretty=%s)
-          BUMP="patch"
+          COMMITS=$(git log $(git describe --tags --abbrev=0)..HEAD --pretty=%s)
+          echo "Commits since last tag:"
+          echo "$COMMITS"
+
+          BUMP="patch" # default
           if echo "$COMMITS" | grep -q "Release:Major"; then
             BUMP="major"
           elif echo "$COMMITS" | grep -q "Release:Minor"; then
@@ -35,6 +43,7 @@ jobs:
           elif echo "$COMMITS" | grep -q "Release:Patch"; then
             BUMP="patch"
           fi
+
           echo "bump=$BUMP" >> $GITHUB_OUTPUT
 
       # 5️⃣ Compute next semantic version
