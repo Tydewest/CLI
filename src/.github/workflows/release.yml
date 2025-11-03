@@ -1,0 +1,60 @@
+name: Build & Release Dynaserve
+
+on:
+  push:
+    tags:
+      - '*.*.*'   # matches tags like 1.5.0
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️⃣ Checkout the repo
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      # 2️⃣ Install build tools
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y build-essential curl
+
+      # 3️⃣ Build dynaserve binary
+      - name: Build dynaserve
+        run: |
+          mkdir -p bin
+          gcc -Wall -Wextra -O2 -Iinclude -o bin/dynaserve src/main.c src/commands.c
+
+      # 4️⃣ Compute SHA256 checksum
+      - name: Compute SHA256
+        id: checksum
+        run: |
+          SHA256=$(shasum -a 256 bin/dynaserve | awk '{print $1}')
+          echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+
+      # 5️⃣ Update installer script with embedded checksum
+      - name: Update install.sh with checksum
+        run: |
+          sed -i.bak "s/INSERT_SHA256_HERE/${{ steps.checksum.outputs.sha256 }}/" install.sh
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          git add install.sh
+          git commit -m "Update installer for version ${{ github.ref_name }} with checksum"
+          git push origin HEAD:${{ github.ref_name }}
+
+      # 6️⃣ Create GitHub release
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 7️⃣ Upload release assets
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            bin/dynaserve
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

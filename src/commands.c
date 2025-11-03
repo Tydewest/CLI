@@ -8,6 +8,16 @@
 #include <time.h>
 #include "dynaserve.h"
 
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#endif
+
+#define COLOR_RESET   "\033[0m"
+#define COLOR_GREEN   "\033[32m"
+#define COLOR_YELLOW  "\033[33m"
+#define COLOR_BLUE    "\033[34m"
+#define COLOR_RED     "\033[31m"
+
 // ---------------- Helpers ----------------
 static char *get_cache_path() {
     static char path[PATH_MAX];
@@ -46,33 +56,31 @@ static int read_cache(char *version, size_t size) {
     return 1;
 }
 
-// ---------------- Async cached update check ----------------
-void async_update_check_cached() {
-    pid_t pid = fork();
-    if (pid == 0) { // child
-        char latest_version[64] = {0};
+// ---------------- Update check (synchronous) ----------------
+void check_update() {
+    char latest_version[64] = {0};
 
-        if (!is_cache_valid() || !read_cache(latest_version, sizeof(latest_version))) {
-            FILE *fp = popen(
-                "curl -s https://api.github.com/repos/Tydewest/CLI/releases/latest | "
-                "grep tag_name | head -n1 | cut -d'\"' -f4", "r");
-            if (fp) {
-                if (fgets(latest_version, sizeof(latest_version), fp) != NULL) {
-                    latest_version[strcspn(latest_version, "\n")] = 0;
-                    write_cache(latest_version); // update cache
-                }
-                pclose(fp);
+    if (!is_cache_valid() || !read_cache(latest_version, sizeof(latest_version))) {
+        FILE *fp = popen(
+            "curl -s https://api.github.com/repos/Tydewest/CLI/releases/latest | "
+            "grep tag_name | head -n1 | cut -d'\"' -f4", "r");
+        if (fp) {
+            if (fgets(latest_version, sizeof(latest_version), fp) != NULL) {
+                latest_version[strcspn(latest_version, "\n")] = 0;
+                write_cache(latest_version);
             }
+            pclose(fp);
         }
+    }
 
-        if (strlen(latest_version) > 0 && strcmp(latest_version, DYNASERVE_VERSION) != 0) {
+    if (strlen(latest_version) > 0 && strcmp(latest_version, DYNASERVE_VERSION) != 0) {
+        if (isatty(fileno(stdout))) { // only print in interactive terminals
+            printf("\n");
             printf(COLOR_YELLOW "  ⚠ Dynaserve CLI v%s available! Run %sdynaserve update%s to upgrade\n" COLOR_RESET,
                    latest_version, COLOR_GREEN, COLOR_YELLOW);
+            printf("\n");
         }
-        fflush(stdout);
-        _exit(0);
     }
-    // parent continues
 }
 
 // ---------------- Commands ----------------
@@ -84,33 +92,29 @@ void print_help() {
     printf(COLOR_GREEN "  version" COLOR_RESET "       Show Dynaserve CLI version\n");
     printf(COLOR_GREEN "  update" COLOR_RESET "        Update CLI to latest version\n");
 
-    async_update_check_cached();
+    check_update();
 }
 
 void greet_user(const char *name) {
     printf(COLOR_YELLOW "Hello, %s!\n" COLOR_RESET, name);
-    async_update_check_cached();
+    check_update();
 }
 
 void run_server(const char *port) {
     printf(COLOR_YELLOW "Starting Dynaserve server on port %s...\n" COLOR_RESET, port);
-    async_update_check_cached();
+    check_update();
 }
 
 void show_version() {
     printf(COLOR_GREEN "Dynaserve CLI %s\n" COLOR_RESET, DYNASERVE_VERSION);
-    async_update_check_cached();
+    check_update();
 }
 
 // ---------------- Update CLI ----------------
-// Same as previous update_cli() function from last version
-// It can optionally clear the cache after updating:
 void update_cli() {
-    // Remove cached version after update
     const char *cache_file = get_cache_path();
-    remove(cache_file);
+    remove(cache_file); // clear cached version
 
-    // Call previous update_cli() logic here
     printf(COLOR_YELLOW "Checking for updates...\n" COLOR_RESET);
 
     char latest_version[64] = {0};
