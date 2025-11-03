@@ -2,59 +2,96 @@ name: Build & Release Dynaserve
 
 on:
   push:
-    tags:
-      - '*.*.*'   # matches tags like 1.5.0
+    branches:
+      - Release  # Trigger on merges to release branch
 
 jobs:
-  build-and-release:
+  release:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout the repo
-      - name: Checkout repo
-        uses: actions/checkout@v3
+      # 1️⃣ Checkout
+      - uses: actions/checkout@v3
 
-      # 2️⃣ Install build tools
-      - name: Install build tools
-        run: sudo apt-get update && sudo apt-get install -y build-essential curl
+      # 2️⃣ Install dependencies
+      - run: sudo apt-get update && sudo apt-get install -y build-essential curl git
 
-      # 3️⃣ Build dynaserve binary
-      - name: Build dynaserve
+      # 3️⃣ Get latest tag
+      - id: get_tag
         run: |
+          git fetch --tags
+          LATEST_TAG=$(git describe --tags --abbrev=0 || echo "0.0.0")
+          echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+
+      # 4️⃣ Determine version bump based on commit messages
+      - id: version_bump
+        run: |
+          COMMITS=$(git log origin/release..HEAD --pretty=%s)
+          BUMP="patch"
+          if echo "$COMMITS" | grep -q "Release:Major"; then
+            BUMP="major"
+          elif echo "$COMMITS" | grep -q "Release:Minor"; then
+            BUMP="minor"
+          elif echo "$COMMITS" | grep -q "Release:Patch"; then
+            BUMP="patch"
+          fi
+          echo "bump=$BUMP" >> $GITHUB_OUTPUT
+
+      # 5️⃣ Compute next semantic version
+      - id: next_version
+        run: |
+          IFS='.' read -r MAJOR MINOR PATCH <<< "${{ steps.get_tag.outputs.latest_tag }}"
+          case "${{ steps.version_bump.outputs.bump }}" in
+            major)
+              MAJOR=$((MAJOR+1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR+1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH+1))
+              ;;
+          esac
+          NEXT_TAG="$MAJOR.$MINOR.$PATCH"
+          echo "next_tag=$NEXT_TAG" >> $GITHUB_OUTPUT
+
+      # 6️⃣ Build CLI binary
+      - run: |
           mkdir -p bin
           gcc -Wall -Wextra -O2 -Iinclude -o bin/dynaserve src/main.c src/commands.c
 
-      # 4️⃣ Compute SHA256 checksum
-      - name: Compute SHA256
-        id: checksum
+      # 7️⃣ Compute SHA256 checksum
+      - id: checksum
         run: |
           SHA256=$(shasum -a 256 bin/dynaserve | awk '{print $1}')
           echo "sha256=$SHA256" >> $GITHUB_OUTPUT
 
-      # 5️⃣ Update installer script with embedded checksum
-      - name: Update install.sh with checksum
-        run: |
-          sed -i.bak "s/INSERT_SHA256_HERE/${{ steps.checksum.outputs.sha256 }}/" install.sh
-          git config --global user.name "github-actions"
-          git config --global user.email "github-actions@github.com"
-          git add install.sh
-          git commit -m "Update installer for version ${{ github.ref_name }} with checksum"
-          git push origin HEAD:${{ github.ref_name }}
+      # 8️⃣ Generate release installer with correct SHA256
+      - run: |
+          cp install.sh install_release.sh
+          sed -i.bak "s/INSERT_SHA256_HERE/${{ steps.checksum.outputs.sha256 }}/" install_release.sh
+          sed -i.bak "s/LATEST/${{ steps.next_version.outputs.next_tag }}/" install_release.sh
 
-      # 6️⃣ Create GitHub release
-      - name: Create Release
-        id: create_release
-        uses: softprops/action-gh-release@v1
+      # 9️⃣ Tag release
+      - run: |
+          git tag ${{ steps.next_version.outputs.next_tag }}
+          git push origin ${{ steps.next_version.outputs.next_tag }}
+
+      # 🔟 Create GitHub release
+      - uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ steps.next_version.outputs.next_tag }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 7️⃣ Upload release assets
-      - name: Upload release assets
-        uses: softprops/action-gh-release@v1
+      # 1️⃣1️⃣ Upload release assets
+      - uses: softprops/action-gh-release@v1
         with:
           files: |
             bin/dynaserve
+            install_release.sh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
