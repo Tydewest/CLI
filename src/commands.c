@@ -51,11 +51,8 @@ void async_update_check_cached() {
     pid_t pid = fork();
     if (pid == 0) { // child
         char latest_version[64] = {0};
-        int from_cache = 0;
 
-        if (is_cache_valid() && read_cache(latest_version, sizeof(latest_version))) {
-            from_cache = 1;
-        } else {
+        if (!is_cache_valid() || !read_cache(latest_version, sizeof(latest_version))) {
             FILE *fp = popen(
                 "curl -s https://api.github.com/repos/Tydewest/CLI/releases/latest | "
                 "grep tag_name | head -n1 | cut -d'\"' -f4", "r");
