@@ -76,7 +76,7 @@ void check_update() {
     if (strlen(latest_version) > 0 && strcmp(latest_version, DYNASERVE_VERSION) != 0) {
         if (isatty(fileno(stdout))) { // only print in interactive terminals
             printf("\n");
-            printf(COLOR_YELLOW "  ⚠ Dynaserve CLI v%s available! Run %sdynaserve update%s to upgrade\n" COLOR_RESET,
+            printf(COLOR_YELLOW "  ⚠ Dynaserve CLI v%s available! Run %ssudo dynaserve update%s to upgrade\n" COLOR_RESET,
                    latest_version, COLOR_GREEN, COLOR_YELLOW);
             printf("\n");
         }
