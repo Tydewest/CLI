@@ -6,8 +6,80 @@ on:
       - Release
 
 jobs:
-  build-and-release:
+  build-macos:
     runs-on: macos-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install build dependencies
+        run: |
+          xcode-select --install 2>/dev/null || true
+      
+      - name: Build CLI for Apple Silicon (arm64)
+        run: |
+          make clean || true
+          CFLAGS="-target arm64-apple-macos11" make
+          mv dynaserve dynaserve-darwin-arm64
+      
+      - name: Build CLI for Intel (x86_64)
+        run: |
+          make clean
+          CFLAGS="-target x86_64-apple-macos10.13" make
+          mv dynaserve dynaserve-darwin-x86_64
+      
+      - name: Verify macOS binaries
+        run: |
+          echo "=== Apple Silicon Binary ==="
+          file dynaserve-darwin-arm64
+          ls -lh dynaserve-darwin-arm64
+          echo ""
+          echo "=== Intel Binary ==="
+          file dynaserve-darwin-x86_64
+          ls -lh dynaserve-darwin-x86_64
+      
+      - name: Upload macOS binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-binaries
+          path: |
+            dynaserve-darwin-arm64
+            dynaserve-darwin-x86_64
+
+  build-linux:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential gcc make
+      
+      - name: Build CLI for Linux (x86_64)
+        run: |
+          make clean || true
+          make
+          mv dynaserve dynaserve-linux-x86_64
+      
+      - name: Verify Linux binary
+        run: |
+          echo "=== Linux Binary ==="
+          file dynaserve-linux-x86_64
+          ls -lh dynaserve-linux-x86_64
+      
+      - name: Upload Linux binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-binary
+          path: dynaserve-linux-x86_64
+
+  release:
+    needs: [build-macos, build-linux]
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     
@@ -17,32 +89,17 @@ jobs:
         with:
           fetch-depth: 0
       
-      - name: Install build dependencies
-        run: |
-          # Ensure Xcode command line tools are available
-          xcode-select --install 2>/dev/null || true
+      - name: Download all binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: binaries
       
-      - name: Build CLI for Apple Silicon (arm64)
+      - name: Organize binaries
         run: |
-          make clean || true
-          CFLAGS="-target arm64-apple-macos11" make
-          mv dynaserve dynaserve-arm64
-      
-      - name: Build CLI for Intel (x86_64)
-        run: |
-          make clean
-          CFLAGS="-target x86_64-apple-macos10.13" make
-          mv dynaserve dynaserve-x86_64
-      
-      - name: Verify binaries
-        run: |
-          echo "=== Apple Silicon Binary ==="
-          file dynaserve-arm64
-          ls -lh dynaserve-arm64
-          echo ""
-          echo "=== Intel Binary ==="
-          file dynaserve-x86_64
-          ls -lh dynaserve-x86_64
+          mkdir -p release
+          mv binaries/macos-binaries/* release/
+          mv binaries/linux-binary/* release/
+          ls -lh release/
       
       - name: Determine version bump
         id: version_bump
@@ -97,20 +154,39 @@ jobs:
             **Version Bump:** ${{ steps.version_bump.outputs.bump_type }}
             
             ### Installation
-            
-            **Apple Silicon (M1/M2/M3/M4):**
+
+            **Universal Installer (Recommended):**
             ```bash
-            curl -L -o dynaserve https://github.com/${{ github.repository }}/releases/download/${{ steps.version_bump.outputs.new_tag }}/dynaserve-arm64
+            curl -sSL https://cli.dynaserve.io/install.sh | bash
+            ```
+            
+            **macOS - Apple Silicon (M1/M2/M3/M4):**
+            ```bash
+            curl -L -o dynaserve https://github.com/${{ github.repository }}/releases/download/${{ steps.version_bump.outputs.new_tag }}/dynaserve-darwin-arm64
             chmod +x dynaserve
             sudo mv dynaserve /usr/local/bin/
             ```
             
-            **Intel Mac:**
+            **macOS - Intel:**
             ```bash
-            curl -L -o dynaserve https://github.com/${{ github.repository }}/releases/download/${{ steps.version_bump.outputs.new_tag }}/dynaserve-x86_64
+            curl -L -o dynaserve https://github.com/${{ github.repository }}/releases/download/${{ steps.version_bump.outputs.new_tag }}/dynaserve-darwin-x86_64
             chmod +x dynaserve
             sudo mv dynaserve /usr/local/bin/
             ```
+            
+            **Linux (x86_64):**
+            ```bash
+            curl -L -o dynaserve https://github.com/${{ github.repository }}/releases/download/${{ steps.version_bump.outputs.new_tag }}/dynaserve-linux-x86_64
+            chmod +x dynaserve
+            sudo mv dynaserve /usr/local/bin/
+            ```
+            
+            ### Auto-Update
+            Once installed, you can update to the latest version by running:
+            ```bash
+            dynaserve update
+            ```
+            The CLI will automatically detect your platform and download the correct binary.
             
             ### Changes in this release
             - Auto-generated release from commit ${{ github.sha }}
@@ -119,7 +195,8 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            dynaserve-arm64
-            dynaserve-x86_64
+            release/dynaserve-darwin-arm64
+            release/dynaserve-darwin-x86_64
+            release/dynaserve-linux-x86_64
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

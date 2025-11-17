@@ -6,8 +6,11 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <time.h>
-#include <mach-o/dyld.h>
 #include "dynaserve.h"
+
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#endif
 
 #define COLOR_RESET   "\033[0m"
 #define COLOR_GREEN   "\033[32m"
@@ -107,6 +110,32 @@ void show_version() {
     check_update();
 }
 
+// ---------------- Get platform string ----------------
+static const char* get_platform_string() {
+#if defined(__APPLE__)
+    // Detect macOS architecture
+    FILE *arch_fp = popen("uname -m", "r");
+    static char platform[64] = {0};
+    if (arch_fp) {
+        char arch[32] = {0};
+        if (fgets(arch, sizeof(arch), arch_fp) != NULL) {
+            arch[strcspn(arch, "\n")] = 0;
+            if (strcmp(arch, "arm64") == 0) {
+                snprintf(platform, sizeof(platform), "darwin-arm64");
+            } else {
+                snprintf(platform, sizeof(platform), "darwin-x86_64");
+            }
+        }
+        pclose(arch_fp);
+    }
+    return platform[0] ? platform : "darwin-arm64";
+#elif defined(__linux__)
+    return "linux-x86_64";
+#else
+    return "unknown";
+#endif
+}
+
 // ---------------- Update CLI ----------------
 void update_cli() {
     const char *cache_file = get_cache_path();
@@ -134,31 +163,38 @@ void update_cli() {
 
     printf(COLOR_YELLOW "New version available: %s\n" COLOR_RESET, latest_version);
 
-    // Get executable path on macOS
+    // Get executable path
     char exe_path[PATH_MAX] = {0};
+#if defined(__APPLE__)
     uint32_t size = sizeof(exe_path);
     if (_NSGetExecutablePath(exe_path, &size) != 0) {
         printf(COLOR_RED "Failed to get executable path.\n" COLOR_RESET);
         return;
     }
-
-    // Detect architecture
-    char arch[32] = "arm64"; // Default to Apple Silicon
-    FILE *arch_fp = popen("uname -m", "r");
-    if (arch_fp) {
-        if (fgets(arch, sizeof(arch), arch_fp) != NULL) {
-            arch[strcspn(arch, "\n")] = 0;
-        }
-        pclose(arch_fp);
+#elif defined(__linux__)
+    ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path)-1);
+    if (len != -1) {
+        exe_path[len] = '\0';
+    } else {
+        printf(COLOR_RED "Failed to get executable path.\n" COLOR_RESET);
+        return;
     }
+#else
+    printf(COLOR_RED "Unsupported platform.\n" COLOR_RESET);
+    return;
+#endif
 
-    // Construct download URL with architecture
+    // Get platform string
+    const char *platform = get_platform_string();
+    printf(COLOR_YELLOW "Detected platform: %s\n" COLOR_RESET, platform);
+
+    // Construct download URL with platform
     char download_cmd[1024];
     snprintf(download_cmd, sizeof(download_cmd),
         "curl -L -o \"%s_new\" https://github.com/Tydewest/CLI/releases/download/%s/dynaserve-%s",
-        exe_path, latest_version, arch);
+        exe_path, latest_version, platform);
 
-    printf(COLOR_YELLOW "Downloading new version for %s...\n" COLOR_RESET, arch);
+    printf(COLOR_YELLOW "Downloading new version...\n" COLOR_RESET);
     if (system(download_cmd) != 0) {
         printf(COLOR_RED "Failed to download latest binary.\n" COLOR_RESET);
         return;
