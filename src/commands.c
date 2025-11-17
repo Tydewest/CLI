@@ -6,11 +6,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <time.h>
-#include "dynaserve.h"
-
-#if defined(__APPLE__)
 #include <mach-o/dyld.h>
-#endif
+#include "dynaserve.h"
 
 #define COLOR_RESET   "\033[0m"
 #define COLOR_GREEN   "\033[32m"
@@ -137,24 +134,31 @@ void update_cli() {
 
     printf(COLOR_YELLOW "New version available: %s\n" COLOR_RESET, latest_version);
 
+    // Get executable path on macOS
     char exe_path[PATH_MAX] = {0};
-#if defined(__APPLE__)
     uint32_t size = sizeof(exe_path);
-    _NSGetExecutablePath(exe_path, &size);
-#elif defined(__linux__)
-    ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path)-1);
-    if (len != -1) exe_path[len] = '\0';
-    else strcpy(exe_path, "./dynaserve");
-#else
-    strcpy(exe_path, "./dynaserve");
-#endif
+    if (_NSGetExecutablePath(exe_path, &size) != 0) {
+        printf(COLOR_RED "Failed to get executable path.\n" COLOR_RESET);
+        return;
+    }
 
+    // Detect architecture
+    char arch[32] = "arm64"; // Default to Apple Silicon
+    FILE *arch_fp = popen("uname -m", "r");
+    if (arch_fp) {
+        if (fgets(arch, sizeof(arch), arch_fp) != NULL) {
+            arch[strcspn(arch, "\n")] = 0;
+        }
+        pclose(arch_fp);
+    }
+
+    // Construct download URL with architecture
     char download_cmd[1024];
     snprintf(download_cmd, sizeof(download_cmd),
-        "curl -L -o \"%s_new\" https://github.com/Tydewest/CLI/releases/download/%s/dynaserve",
-        exe_path, latest_version);
+        "curl -L -o \"%s_new\" https://github.com/Tydewest/CLI/releases/download/%s/dynaserve-%s",
+        exe_path, latest_version, arch);
 
-    printf(COLOR_YELLOW "Downloading new version...\n" COLOR_RESET);
+    printf(COLOR_YELLOW "Downloading new version for %s...\n" COLOR_RESET, arch);
     if (system(download_cmd) != 0) {
         printf(COLOR_RED "Failed to download latest binary.\n" COLOR_RESET);
         return;
