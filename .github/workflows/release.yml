@@ -77,8 +77,35 @@ jobs:
           name: linux-binary
           path: dynaserve-linux-x86_64
 
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          choco install mingw -y
+          refreshenv
+
+      - name: Build CLI for Windows
+        run: |
+          make clean || true
+          gcc src/*.c -o dynaserve.exe
+
+      - name: Verify Windows binary
+        run: |
+          dir dynaserve.exe
+
+      - name: Upload Windows binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-binary
+          path: dynaserve.exe
+
   release:
-    needs: [build-macos, build-linux]
+    needs: [build-macos, build-linux, build-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -99,26 +126,19 @@ jobs:
           mkdir -p release
           mv binaries/macos-binaries/* release/
           mv binaries/linux-binary/* release/
+          mv binaries/windows-binary/* release/
           ls -lh release/
       
       - name: Determine version bump
         id: version_bump
         run: |
-          # Get the latest tag, default to 0.0.0 if none exists
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
           echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
-          
-          # Parse version numbers
           IFS='.' read -r -a VERSION <<< "${LATEST_TAG#v}"
           MAJOR="${VERSION[0]:-0}"
           MINOR="${VERSION[1]:-0}"
           PATCH="${VERSION[2]:-0}"
-          
-          # Get commit message
           COMMIT_MSG=$(git log -1 --pretty=%B)
-          echo "Commit message: $COMMIT_MSG"
-          
-          # Determine version bump based on commit message
           if echo "$COMMIT_MSG" | grep -iq "Release: Major"; then
             MAJOR=$((MAJOR + 1))
             MINOR=0
@@ -128,17 +148,11 @@ jobs:
             MINOR=$((MINOR + 1))
             PATCH=0
             BUMP_TYPE="Minor"
-          elif echo "$COMMIT_MSG" | grep -iq "Release: Patch"; then
-            PATCH=$((PATCH + 1))
-            BUMP_TYPE="Patch"
           else
-            # Default to patch if no keyword found
             PATCH=$((PATCH + 1))
             BUMP_TYPE="Patch (default)"
           fi
-          
           NEW_TAG="${MAJOR}.${MINOR}.${PATCH}"
-          
           echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
           echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
           echo "New version: $NEW_TAG (${BUMP_TYPE} bump)"
@@ -150,35 +164,34 @@ jobs:
           name: Release ${{ steps.version_bump.outputs.new_tag }}
           body: |
             ## Release ${{ steps.version_bump.outputs.new_tag }}
-            
             **Version Bump:** ${{ steps.version_bump.outputs.bump_type }}
-            
             ### Installation
-
             **Universal Installer (Recommended):**
             ```bash
             curl -sSL https://cli.dynaserve.io/install.sh | bash
             ```
-            
             **macOS - Apple Silicon (M1/M2/M3/M4):**
             ```bash
             curl -L -o dynaserve https://github.com/${{ github.repository }}/releases/download/${{ steps.version_bump.outputs.new_tag }}/dynaserve-darwin-arm64
             chmod +x dynaserve
             sudo mv dynaserve /usr/local/bin/
             ```
-            
             **macOS - Intel:**
             ```bash
             curl -L -o dynaserve https://github.com/${{ github.repository }}/releases/download/${{ steps.version_bump.outputs.new_tag }}/dynaserve-darwin-x86_64
             chmod +x dynaserve
             sudo mv dynaserve /usr/local/bin/
             ```
-            
             **Linux (x86_64):**
             ```bash
             curl -L -o dynaserve https://github.com/${{ github.repository }}/releases/download/${{ steps.version_bump.outputs.new_tag }}/dynaserve-linux-x86_64
             chmod +x dynaserve
             sudo mv dynaserve /usr/local/bin/
+            ```
+            **Windows:**
+            ```powershell
+            Invoke-WebRequest -Uri https://github.com/${{ github.repository }}/releases/download/${{ steps.version_bump.outputs.new_tag }}/dynaserve.exe -OutFile dynaserve.exe
+            Move-Item dynaserve.exe C:\Windows\System32\dynaserve.exe
             ```
             
             ### Auto-Update
@@ -186,8 +199,6 @@ jobs:
             ```bash
             dynaserve update
             ```
-            The CLI will automatically detect your platform and download the correct binary.
-            
             ### Changes in this release
             - Auto-generated release from commit ${{ github.sha }}
             
@@ -198,5 +209,6 @@ jobs:
             release/dynaserve-darwin-arm64
             release/dynaserve-darwin-x86_64
             release/dynaserve-linux-x86_64
+            release/dynaserve.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

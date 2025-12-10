@@ -1,6 +1,6 @@
-# :hammer_and_wrench: Dynaserve CLI.
+# :hammer_and_wrench: Dynaserve CLI
 
-**Dynaserve CLI** is a lightweight, cross-platform command-line tool designed for developers who need full control over their Dynaserve instances on macOS and Linux. With Dynaserve CLI, you can quickly start, manage, and monitor services, automate workflows, and integrate Dynaserve into your development pipelines.  
+**Dynaserve CLI** is a lightweight, cross-platform command-line tool designed for developers who need full control over their Dynaserve instances on macOS, Linux, and Windows. With Dynaserve CLI, you can quickly start, manage, and monitor services, automate workflows, and integrate Dynaserve into your development pipelines.  
 
 It offers lightning-fast execution, a powerful set of commands, built-in version and update checks, and robust safety features like automatic backup and optional checksum verification. Whether you're scripting deployments, debugging locally, or managing multiple instances, Dynaserve CLI provides a seamless, developer-first experience that saves time and reduces complexity.  
 
@@ -21,7 +21,7 @@ With its streamlined design and automation-ready workflow, Dynaserve CLI turns s
 
 ## Features
 
-- Cross-platform support: macOS & Linux  
+- Cross-platform support: macOS, Linux & Windows  
 - One-line installation via remote script  
 - Auto-update detection and version comparison  
 - Safe install mode with checksum verification  
@@ -30,3 +30,10 @@ With its streamlined design and automation-ready workflow, Dynaserve CLI turns s
 - Universal static executable (no external dependencies)
 
 ---
+
+## Installation
+
+**Universal installer (recommended)**:
+
+```bash
+curl -sSL https://cli.dynaserve.io/install.sh | bash
