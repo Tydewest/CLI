@@ -56,16 +56,23 @@ const char* get_installed_version() {
     const char *home = getenv("HOME");
     static char path[PATH_MAX];
 
-    if (!home) return "unknown";
+    if (!home) return "1.0.0"; // default version
 
     snprintf(path, sizeof(path), "%s/.dynaserve_version", home);
 
     FILE *fp = fopen(path, "r");
-    if (!fp) return "unknown";
+    if (!fp) {
+        // Create version file with default
+        FILE *new_fp = fopen(path, "w");
+        if (new_fp) {
+            fprintf(new_fp, "1.0.0\n");
+            fclose(new_fp);
+        }
+        return "1.0.0";
+    }
 
     fgets(version, sizeof(version), fp);
     fclose(fp);
-
     version[strcspn(version, "\n")] = 0;
     return version;
 }
