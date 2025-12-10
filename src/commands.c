@@ -12,12 +12,6 @@
 #include <mach-o/dyld.h>
 #endif
 
-#define COLOR_RESET   "\033[0m"
-#define COLOR_GREEN   "\033[32m"
-#define COLOR_YELLOW  "\033[33m"
-#define COLOR_BLUE    "\033[34m"
-#define COLOR_RED     "\033[31m"
-
 // ---------------- Helpers ----------------
 static char *get_cache_path() {
     static char path[PATH_MAX];
@@ -56,6 +50,26 @@ static int read_cache(char *version, size_t size) {
     return 1;
 }
 
+// ---------------- Dynamic installed version ----------------
+const char* get_installed_version() {
+    static char version[64] = {0};
+    const char *home = getenv("HOME");
+    static char path[PATH_MAX];
+
+    if (!home) return "unknown";
+
+    snprintf(path, sizeof(path), "%s/.dynaserve_version", home);
+
+    FILE *fp = fopen(path, "r");
+    if (!fp) return "unknown";
+
+    fgets(version, sizeof(version), fp);
+    fclose(fp);
+
+    version[strcspn(version, "\n")] = 0;
+    return version;
+}
+
 // ---------------- Update check (synchronous) ----------------
 void check_update() {
     char latest_version[64] = {0};
@@ -73,7 +87,7 @@ void check_update() {
         }
     }
 
-    if (strlen(latest_version) > 0 && strcmp(latest_version, DYNASERVE_VERSION) != 0) {
+    if (strlen(latest_version) > 0 && strcmp(latest_version, get_installed_version()) != 0) {
         if (isatty(fileno(stdout))) { // only print in interactive terminals
             printf("\n");
             printf(COLOR_YELLOW "  ⚠ Dynaserve CLI v%s available! Run %ssudo dynaserve update%s to upgrade\n" COLOR_RESET,
@@ -106,34 +120,8 @@ void run_server(const char *port) {
 }
 
 void show_version() {
-    printf(COLOR_GREEN "Dynaserve CLI %s\n" COLOR_RESET, DYNASERVE_VERSION);
+    printf(COLOR_GREEN "Dynaserve CLI %s\n" COLOR_RESET, get_installed_version());
     check_update();
-}
-
-// ---------------- Get platform string ----------------
-static const char* get_platform_string() {
-#if defined(__APPLE__)
-    // Detect macOS architecture
-    FILE *arch_fp = popen("uname -m", "r");
-    static char platform[64] = {0};
-    if (arch_fp) {
-        char arch[32] = {0};
-        if (fgets(arch, sizeof(arch), arch_fp) != NULL) {
-            arch[strcspn(arch, "\n")] = 0;
-            if (strcmp(arch, "arm64") == 0) {
-                snprintf(platform, sizeof(platform), "darwin-arm64");
-            } else {
-                snprintf(platform, sizeof(platform), "darwin-x86_64");
-            }
-        }
-        pclose(arch_fp);
-    }
-    return platform[0] ? platform : "darwin-arm64";
-#elif defined(__linux__)
-    return "linux-x86_64";
-#else
-    return "unknown";
-#endif
 }
 
 // ---------------- Update CLI ----------------
@@ -156,8 +144,8 @@ void update_cli() {
     }
     pclose(fp);
 
-    if (strcmp(latest_version, DYNASERVE_VERSION) == 0) {
-        printf(COLOR_GREEN "Dynaserve CLI is already up-to-date (%s).\n" COLOR_RESET, DYNASERVE_VERSION);
+    if (strcmp(latest_version, get_installed_version()) == 0) {
+        printf(COLOR_GREEN "Dynaserve CLI is already up-to-date (%s).\n" COLOR_RESET, get_installed_version());
         return;
     }
 
@@ -184,11 +172,8 @@ void update_cli() {
     return;
 #endif
 
-    // Get platform string
-    const char *platform = get_platform_string();
-    printf(COLOR_YELLOW "Detected platform: %s\n" COLOR_RESET, platform);
-
     // Construct download URL with platform
+    const char *platform = "darwin-x86_64"; // or dynamically detect
     char download_cmd[1024];
     snprintf(download_cmd, sizeof(download_cmd),
         "curl -L -o \"%s_new\" https://github.com/Tydewest/CLI/releases/download/%s/dynaserve-%s",
@@ -215,6 +200,17 @@ void update_cli() {
         snprintf(replace_cmd, sizeof(replace_cmd), "mv \"%s_backup\" \"%s\"", exe_path, exe_path);
         system(replace_cmd);
         return;
+    }
+
+    // Write installed version file
+    const char *home = getenv("HOME");
+    char version_path[PATH_MAX];
+    snprintf(version_path, sizeof(version_path), "%s/.dynaserve_version", home);
+
+    FILE *vfp = fopen(version_path, "w");
+    if (vfp) {
+        fprintf(vfp, "%s\n", latest_version);
+        fclose(vfp);
     }
 
     printf(COLOR_GREEN "Dynaserve CLI updated to version %s!\n" COLOR_RESET, latest_version);

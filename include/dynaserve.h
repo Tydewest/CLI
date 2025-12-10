@@ -1,7 +1,6 @@
 #ifndef DYNASERVE_H
 #define DYNASERVE_H
 
-#define DYNASERVE_VERSION "1.0.0"
 #define UPDATE_CACHE_FILE ".dynaserve_update_cache"
 #define UPDATE_CACHE_TTL 86400  // 24 hours in seconds
 
@@ -18,6 +17,7 @@ void greet_user(const char *name);
 void run_server(const char *port);
 void show_version();
 void update_cli(); 
-void async_update_check_cached();
+void check_update();
+const char* get_installed_version();
 
 #endif

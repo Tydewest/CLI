@@ -21,7 +21,7 @@ int main(int argc, char *argv[]) {
         const char *port = (argc >= 3) ? argv[2] : "8080";
         run_server(port);
     }
-    else if (strcmp(command, "version") == 0) show_version();
+    else if (strcmp(command, "version") == 0 || strcmp(command, "-v") == 0) show_version();
     else if (strcmp(command, "update") == 0) update_cli();
     else {
         printf(COLOR_RED "Unknown command: %s\n" COLOR_RESET, command);
