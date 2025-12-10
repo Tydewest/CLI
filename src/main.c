@@ -12,7 +12,7 @@ int main(int argc, char *argv[]) {
 
     const char *command = argv[1];
 
-    if (strcmp(command, "help") == 0) print_help();
+    if (strcmp(command, "help") == 0 || strcmp(command, "-h") == 0) print_help();
     else if (strcmp(command, "greet") == 0) {
         const char *name = (argc >= 3) ? argv[2] : "World";
         greet_user(name);
