@@ -112,7 +112,6 @@ void print_help() {
     printf(COLOR_GREEN "  serve [port]" COLOR_RESET "  Start server on specified port (default 8080)\n");
     printf(COLOR_GREEN "  version" COLOR_RESET "       Show Dynaserve CLI version\n");
     printf(COLOR_GREEN "  update" COLOR_RESET "        Update CLI to latest version\n");
-
     check_update();
 }
 
