@@ -21,7 +21,7 @@ With its streamlined design and automation-ready workflow, Dynaserve CLI turns s
 
 ## Features
 
-- Cross-platform support: macOS & Linux  
+- Cross-platform support: macOS & Linux  .
 - One-line installation via remote script  
 - Auto-update detection and version comparison  
 - Safe install mode with checksum verification  
