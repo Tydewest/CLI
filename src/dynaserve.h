@@ -9,18 +9,14 @@
 #include <sys/stat.h>
 #include <time.h>
 
-// Color codes
-#define COLOR_RESET "\033[0m"
-#define COLOR_RED "\033[31m"
-#define COLOR_GREEN "\033[32m"
-#define COLOR_YELLOW "\033[33m"
-#define COLOR_BLUE "\033[34m"
+#define COLOR_RESET "\x1b[0m"
+#define COLOR_RED   "\x1b[31m"
+#define COLOR_GREEN "\x1b[32m"
+#define COLOR_YELLOW "\x1b[33m"
+#define COLOR_BLUE "\x1b[34m"
 
-// Update cache TTL (in seconds)
-#define UPDATE_CACHE_TTL 86400  // 24 hours
-
-// Cache file
 #define UPDATE_CACHE_FILE ".dynaserve_update_cache"
+#define UPDATE_CACHE_TTL 3600  // 1 hour in seconds
 
 // Function declarations
 void print_help();
@@ -30,6 +26,10 @@ void show_version();
 void update_cli();
 const char* get_installed_version();
 const char* get_platform_string();
+char* get_cache_path();
+int is_cache_valid();
+void write_cache(const char *version);
+int read_cache(char *version, size_t size);
 void check_update();
 
 #endif

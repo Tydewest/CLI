@@ -1,6 +1,7 @@
 #include "dynaserve.h"
 
 int main(int argc, char *argv[]) {
+
     if (argc < 2) {
         printf(COLOR_RED "No command provided. Use 'help' or '-h' for a list of commands.\n" COLOR_RESET);
         return 1;
