@@ -12,7 +12,7 @@ char* get_cache_path() {
 int is_cache_valid() {
     const char *cache_file = get_cache_path();
     struct stat st;
-    if (stat(cache_file, &st) != 0) return 0; // no cache
+    if (stat(cache_file, &st) != 0) return 0;
     time_t now = time(NULL);
     return (now - st.st_mtime) < UPDATE_CACHE_TTL;
 }
@@ -38,22 +38,22 @@ int read_cache(char *version, size_t size) {
     return 1;
 }
 
+// ---------------- Installed Version ----------------
 const char* get_installed_version() {
     static char version[64] = {0};
     const char *home = getenv("HOME");
     static char path[PATH_MAX];
     if (!home) return "unknown";
-
     snprintf(path, sizeof(path), "%s/.dynaserve_version", home);
     FILE *fp = fopen(path, "r");
     if (!fp) return "unknown";
-
     fgets(version, sizeof(version), fp);
     fclose(fp);
     version[strcspn(version, "\n")] = 0;
     return version;
 }
 
+// ---------------- Platform String ----------------
 const char* get_platform_string() {
 #if defined(__APPLE__)
     return "darwin-x86_64";
@@ -64,7 +64,7 @@ const char* get_platform_string() {
 #endif
 }
 
-// ---------------- Update ----------------
+// ---------------- Update Check ----------------
 void check_update() {
     char latest_version[64] = {0};
 
@@ -73,7 +73,7 @@ void check_update() {
             "curl -s https://api.github.com/repos/Tydewest/CLI/releases/latest | "
             "grep tag_name | head -n1 | cut -d'\"' -f4", "r");
         if (fp) {
-            if (fgets(latest_version, sizeof(latest_version), fp)) {
+            if (fgets(latest_version, sizeof(latest_version), fp) != NULL) {
                 latest_version[strcspn(latest_version, "\n")] = 0;
                 write_cache(latest_version);
             }
@@ -81,8 +81,7 @@ void check_update() {
         }
     }
 
-    const char* installed = get_installed_version();
-    if (strlen(latest_version) > 0 && strcmp(latest_version, installed) != 0) {
+    if (strlen(latest_version) > 0 && strcmp(latest_version, get_installed_version()) != 0) {
         if (isatty(fileno(stdout))) {
             printf("\n");
             printf(COLOR_YELLOW "  ⚠ Dynaserve CLI v%s available! Run %ssudo dynaserve update%s to upgrade\n" COLOR_RESET,
@@ -100,9 +99,7 @@ void print_help() {
     printf(COLOR_GREEN "  serve [port]" COLOR_RESET "  Start server on specified port (default 8080)\n");
     printf(COLOR_GREEN "  version" COLOR_RESET "       Show Dynaserve CLI version\n");
     printf(COLOR_GREEN "  update" COLOR_RESET "        Update CLI to latest version\n");
-    printf(COLOR_GREEN "  uninstall" COLOR_RESET "     Remove Dynaserve CLI\n");
-    printf("Instructions can be found at: https://cli.dynserve.io/manual\n");
-
+    printf(COLOR_GREEN "  uninstall" COLOR_RESET "     Uninstall Dynaserve CLI\n");
     check_update();
 }
 
@@ -136,7 +133,7 @@ void update_cli() {
         printf(COLOR_RED "Failed to check latest version.\n" COLOR_RESET);
         return;
     }
-    if (fgets(latest_version, sizeof(latest_version), fp)) {
+    if (fgets(latest_version, sizeof(latest_version), fp) != NULL) {
         latest_version[strcspn(latest_version, "\n")] = 0;
     }
     pclose(fp);
@@ -163,22 +160,30 @@ void update_cli() {
         printf(COLOR_RED "Failed to get executable path.\n" COLOR_RESET);
         return;
     }
+#else
+    printf(COLOR_RED "Unsupported platform.\n" COLOR_RESET);
+    return;
 #endif
+
+    // Check write permission
+    if (access(exe_path, W_OK) != 0) {
+        printf(COLOR_RED "Cannot write to %s. Please run:\n  sudo %s update\n" COLOR_RESET, exe_path, exe_path);
+        return;
+    }
+
+    char platform[64];
+    snprintf(platform, sizeof(platform), "%s", get_platform_string());
 
     char download_cmd[1024];
     snprintf(download_cmd, sizeof(download_cmd),
         "curl -L -o \"%s_new\" https://github.com/Tydewest/CLI/releases/download/%s/dynaserve-%s",
-        exe_path, latest_version, get_platform_string());
+        exe_path, latest_version, platform);
 
     printf(COLOR_YELLOW "Downloading new version...\n" COLOR_RESET);
     if (system(download_cmd) != 0) {
         printf(COLOR_RED "Failed to download latest binary.\n" COLOR_RESET);
         return;
     }
-
-    char chmod_cmd[512];
-    snprintf(chmod_cmd, sizeof(chmod_cmd), "chmod +x \"%s_new\"", exe_path);
-    system(chmod_cmd);
 
     char backup_cmd[512];
     snprintf(backup_cmd, sizeof(backup_cmd), "mv \"%s\" \"%s_backup\"", exe_path, exe_path);
@@ -196,7 +201,6 @@ void update_cli() {
     const char *home = getenv("HOME");
     char version_path[PATH_MAX];
     snprintf(version_path, sizeof(version_path), "%s/.dynaserve_version", home);
-
     FILE *vfp = fopen(version_path, "w");
     if (vfp) {
         fprintf(vfp, "%s\n", latest_version);
@@ -206,13 +210,34 @@ void update_cli() {
     printf(COLOR_GREEN "Dynaserve CLI updated to version %s!\n" COLOR_RESET, latest_version);
 }
 
-// ---------------- Uninstall ----------------
+// ---------------- Uninstaller ----------------
 void uninstall_cli() {
-    const char *home = getenv("HOME");
-    char exe_path[PATH_MAX] = "/usr/local/bin/dynaserve";
-    char version_file[PATH_MAX];
-    snprintf(version_file, sizeof(version_file), "%s/.dynaserve_version", home);
+    char exe_path[PATH_MAX] = {0};
+#if defined(__APPLE__)
+    uint32_t size = sizeof(exe_path);
+    if (_NSGetExecutablePath(exe_path, &size) != 0) {
+        printf(COLOR_RED "Failed to get executable path.\n" COLOR_RESET);
+        return;
+    }
+#elif defined(__linux__)
+    ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path)-1);
+    if (len != -1) exe_path[len] = '\0';
+    else {
+        printf(COLOR_RED "Failed to get executable path.\n" COLOR_RESET);
+        return;
+    }
+#endif
 
-    if (remove(exe_path) == 0) printf(COLOR_GREEN "Dynaserve CLI removed successfully.\n" COLOR_RESET);
-    if (remove(version_file) == 0) printf(COLOR_GREEN "Version file removed.\n" COLOR_RESET);
+    printf(COLOR_YELLOW "Uninstalling Dynaserve CLI...\n" COLOR_RESET);
+    if (unlink(exe_path) != 0) {
+        printf(COLOR_RED "Failed to remove binary. Try running with sudo.\n" COLOR_RESET);
+        return;
+    }
+
+    const char *home = getenv("HOME");
+    char version_path[PATH_MAX];
+    snprintf(version_path, sizeof(version_path), "%s/.dynaserve_version", home);
+    unlink(version_path);
+
+    printf(COLOR_GREEN "Dynaserve CLI successfully uninstalled.\n" COLOR_RESET);
 }
