@@ -168,9 +168,18 @@ void update_cli() {
     printf(COLOR_YELLOW "Checking for updates...\n" COLOR_RESET);
 
     char latest_version[64] = {0};
+#if defined(_WIN32)
+    // Windows: use PowerShell to get latest release
+    FILE *fp = _popen(
+        "powershell -Command \"(Invoke-WebRequest -UseBasicParsing https://api.github.com/repos/Tydewest/CLI/releases/latest).Content | ConvertFrom-Json | Select -Expand tag_name\"",
+        "r");
+#else
+    // Unix/macOS
     FILE *fp = popen(
         "curl -s https://api.github.com/repos/Tydewest/CLI/releases/latest | "
         "grep tag_name | head -n1 | cut -d'\"' -f4", "r");
+#endif
+
     if (!fp) {
         printf(COLOR_RED "Failed to check latest version.\n" COLOR_RESET);
         return;
@@ -178,7 +187,11 @@ void update_cli() {
     if (fgets(latest_version, sizeof(latest_version), fp) != NULL) {
         latest_version[strcspn(latest_version, "\n")] = 0;
     }
+#if defined(_WIN32)
+    _pclose(fp);
+#else
     pclose(fp);
+#endif
 
     const char *installed = get_installed_version();
     if (strcmp(latest_version, installed) == 0) {
@@ -220,7 +233,7 @@ void update_cli() {
     char download_cmd[1024];
 #if defined(_WIN32)
     snprintf(download_cmd, sizeof(download_cmd),
-        "powershell -Command \"Invoke-WebRequest -Uri https://github.com/Tydewest/CLI/releases/download/%s/dynaserve-%s -OutFile '%s_new'\"",
+        "powershell -Command \"Invoke-WebRequest -Uri https://github.com/Tydewest/CLI/releases/download/%s/dynaserve-%s.exe -OutFile '%s_new.exe'\"",
         latest_version, platform, exe_path);
 #else
     snprintf(download_cmd, sizeof(download_cmd),
@@ -253,10 +266,13 @@ void update_cli() {
     }
 #else
     // Windows replacement
-    char old_backup[PATH_MAX];
-    snprintf(old_backup, sizeof(old_backup), "%s_backup.exe", exe_path);
-    rename(exe_path, old_backup);
-    rename(strcat(exe_path, "_new"), exe_path);
+    char backup_path[PATH_MAX];
+    snprintf(backup_path, sizeof(backup_path), "%s_backup.exe", exe_path);
+    rename(exe_path, backup_path);
+
+    char new_path[PATH_MAX];
+    snprintf(new_path, sizeof(new_path), "%s_new.exe", exe_path);
+    rename(new_path, exe_path);
 #endif
 
     // Write installed version file
