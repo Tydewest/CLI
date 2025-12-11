@@ -111,9 +111,14 @@ void print_help() {
     printf(COLOR_GREEN "  help" COLOR_RESET "          Show this help message\n");
     printf(COLOR_GREEN "  greet [name]" COLOR_RESET "  Greet the user\n");
     printf(COLOR_GREEN "  serve [port]" COLOR_RESET "  Start server on specified port (default 8080)\n");
-    printf(COLOR_GREEN "  version, -v" COLOR_RESET "  Show Dynaserve CLI version\n");
+    printf(COLOR_GREEN "  version" COLOR_RESET "  Show Dynaserve CLI version\n");
     printf(COLOR_GREEN "  update" COLOR_RESET "        Update CLI to latest version\n");
     printf(COLOR_BLUE "Instructions can be found at: https://cli.dynserve.io/manual\n" COLOR_RESET);
+
+    printf(COLOR_RED "RED\n" COLOR_RESET);
+    printf(COLOR_GREEN "GREEN\n" COLOR_RESET);
+    printf(COLOR_BLUE "BLUE\n" COLOR_RESET);
+    printf(COLOR_YELLOW "RED\n" COLOR_RESET);
     check_update();
 }
 
