@@ -119,6 +119,7 @@ void print_help() {
     printf(COLOR_GREEN "GREEN\n" COLOR_RESET);
     printf(COLOR_BLUE "BLUE\n" COLOR_RESET);
     printf(COLOR_YELLOW "RED\n" COLOR_RESET);
+    
     check_update();
 }
 
@@ -173,18 +174,17 @@ void update_cli() {
     printf(COLOR_YELLOW "Checking for updates...\n" COLOR_RESET);
 
     char latest_version[64] = {0};
-#if defined(_WIN32)
-    // Windows: use PowerShell to get latest release
-    FILE *fp = _popen(
-        "powershell -Command \"(Invoke-WebRequest -UseBasicParsing https://api.github.com/repos/Tydewest/CLI/releases/latest).Content | ConvertFrom-Json | Select -Expand tag_name\"",
-        "r");
-#else
-    // Unix/macOS
-    FILE *fp = popen(
-        "curl -s https://api.github.com/repos/Tydewest/CLI/releases/latest | "
-        "grep tag_name | head -n1 | cut -d'\"' -f4", "r");
-#endif
 
+#if defined(_WIN32)
+    // Use PowerShell to get the latest tag_name
+    char ps_cmd[512];
+    snprintf(ps_cmd, sizeof(ps_cmd),
+        "powershell -Command \""
+        "$ErrorActionPreference='Stop'; "
+        "$json=Invoke-RestMethod -Uri 'https://api.github.com/repos/Tydewest/CLI/releases/latest'; "
+        "Write-Output $json.tag_name\"");
+
+    FILE *fp = _popen(ps_cmd, "r");
     if (!fp) {
         printf(COLOR_RED "Failed to check latest version.\n" COLOR_RESET);
         return;
@@ -192,9 +192,19 @@ void update_cli() {
     if (fgets(latest_version, sizeof(latest_version), fp) != NULL) {
         latest_version[strcspn(latest_version, "\n")] = 0;
     }
-#if defined(_WIN32)
     _pclose(fp);
 #else
+    // macOS / Linux
+    FILE *fp = popen(
+        "curl -s https://api.github.com/repos/Tydewest/CLI/releases/latest | "
+        "grep tag_name | head -n1 | cut -d'\"' -f4", "r");
+    if (!fp) {
+        printf(COLOR_RED "Failed to check latest version.\n" COLOR_RESET);
+        return;
+    }
+    if (fgets(latest_version, sizeof(latest_version), fp) != NULL) {
+        latest_version[strcspn(latest_version, "\n")] = 0;
+    }
     pclose(fp);
 #endif
 
@@ -234,12 +244,15 @@ void update_cli() {
     const char *platform = get_platform_string();
     printf(COLOR_YELLOW "Detected platform: %s\n" COLOR_RESET, platform);
 
-    // Construct download command
+    // ---------------- Download new version ----------------
     char download_cmd[1024];
 #if defined(_WIN32)
     snprintf(download_cmd, sizeof(download_cmd),
-        "powershell -Command \"Invoke-WebRequest -Uri https://github.com/Tydewest/CLI/releases/download/%s/dynaserve-%s.exe -OutFile '%s_new.exe'\"",
-        latest_version, platform, exe_path);
+        "powershell -Command \""
+        "$ErrorActionPreference='Stop'; "
+        "Invoke-WebRequest -Uri 'https://github.com/Tydewest/CLI/releases/download/%s/dynaserve-windows-x64.exe' "
+        "-OutFile '%s_new' -UseBasicParsing\"",
+        latest_version, exe_path);
 #else
     snprintf(download_cmd, sizeof(download_cmd),
         "curl -L -o \"%s_new\" https://github.com/Tydewest/CLI/releases/download/%s/dynaserve-%s",
@@ -252,6 +265,7 @@ void update_cli() {
         return;
     }
 
+    // ---------------- Replace binary ----------------
 #if !defined(_WIN32)
     char chmod_cmd[512];
     snprintf(chmod_cmd, sizeof(chmod_cmd), "chmod +x \"%s_new\"", exe_path);
@@ -270,17 +284,16 @@ void update_cli() {
         return;
     }
 #else
-    // Windows replacement
-    char backup_path[PATH_MAX];
-    snprintf(backup_path, sizeof(backup_path), "%s_backup.exe", exe_path);
-    rename(exe_path, backup_path);
+    char old_backup[PATH_MAX];
+    snprintf(old_backup, sizeof(old_backup), "%s_backup.exe", exe_path);
+    rename(exe_path, old_backup);
 
-    char new_path[PATH_MAX];
-    snprintf(new_path, sizeof(new_path), "%s_new.exe", exe_path);
-    rename(new_path, exe_path);
+    char new_file[PATH_MAX];
+    snprintf(new_file, sizeof(new_file), "%s_new", exe_path);
+    rename(new_file, exe_path);
 #endif
 
-    // Write installed version file
+    // ---------------- Write installed version file ----------------
     const char *home = getenv("HOME");
 #if defined(_WIN32)
     if (!home) home = getenv("USERPROFILE");
