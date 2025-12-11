@@ -1,15 +1,10 @@
-CFLAGS = -Wall -Wextra -O2 -Isrc
+CC = gcc
+CFLAGS = -Wall -Wextra -O2 -Iinclude
 SRC = src/main.c src/commands.c
-OBJ = $(SRC:.c=.o)
 OUT = dynaserve
 
-all: $(OUT)
-
-$(OUT): $(OBJ)
-	$(CC) $(OBJ) -o $(OUT)
-
-%.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+all: $(SRC)
+	$(CC) $(CFLAGS) -o $(OUT) $(SRC)
 
 clean:
-	rm -f $(OBJ) $(OUT)
+	rm -f $(OUT)

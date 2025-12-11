@@ -10,17 +10,12 @@
 
 #if defined(__APPLE__)
 #include <mach-o/dyld.h>
-#elif defined(_WIN32)
-#include <windows.h>
 #endif
 
 // ---------------- Helpers ----------------
 static char *get_cache_path() {
     static char path[PATH_MAX];
     const char *home = getenv("HOME");
-#if defined(_WIN32)
-    if (!home) home = getenv("USERPROFILE");
-#endif
     if (!home) home = ".";
     snprintf(path, sizeof(path), "%s/%s", home, UPDATE_CACHE_FILE);
     return path;
@@ -59,21 +54,25 @@ static int read_cache(char *version, size_t size) {
 const char* get_installed_version() {
     static char version[64] = {0};
     const char *home = getenv("HOME");
-#if defined(_WIN32)
-    if (!home) home = getenv("USERPROFILE");
-#endif
     static char path[PATH_MAX];
 
-    if (!home) return "unknown";
+    if (!home) return "1.0.0"; // default version
 
     snprintf(path, sizeof(path), "%s/.dynaserve_version", home);
 
     FILE *fp = fopen(path, "r");
-    if (!fp) return "unknown";
+    if (!fp) {
+        // Create version file with default
+        FILE *new_fp = fopen(path, "w");
+        if (new_fp) {
+            fprintf(new_fp, "1.0.0\n");
+            fclose(new_fp);
+        }
+        return "1.0.0";
+    }
 
     fgets(version, sizeof(version), fp);
     fclose(fp);
-
     version[strcspn(version, "\n")] = 0;
     return version;
 }
@@ -111,15 +110,8 @@ void print_help() {
     printf(COLOR_GREEN "  help" COLOR_RESET "          Show this help message\n");
     printf(COLOR_GREEN "  greet [name]" COLOR_RESET "  Greet the user\n");
     printf(COLOR_GREEN "  serve [port]" COLOR_RESET "  Start server on specified port (default 8080)\n");
-    printf(COLOR_GREEN "  version" COLOR_RESET "  Show Dynaserve CLI version\n");
+    printf(COLOR_GREEN "  version" COLOR_RESET "       Show Dynaserve CLI version\n");
     printf(COLOR_GREEN "  update" COLOR_RESET "        Update CLI to latest version\n");
-    printf(COLOR_BLUE "Instructions can be found at: https://cli.dynserve.io/manual\n" COLOR_RESET);
-
-    printf(COLOR_RED "RED\n" COLOR_RESET);
-    printf(COLOR_GREEN "GREEN\n" COLOR_RESET);
-    printf(COLOR_BLUE "BLUE\n" COLOR_RESET);
-    printf(COLOR_YELLOW "RED\n" COLOR_RESET);
-    
     check_update();
 }
 
@@ -134,36 +126,8 @@ void run_server(const char *port) {
 }
 
 void show_version() {
-    const char *installed = get_installed_version();
-    printf(COLOR_GREEN "Dynaserve CLI %s\n" COLOR_RESET, installed);
+    printf(COLOR_GREEN "Dynaserve CLI %s\n" COLOR_RESET, get_installed_version());
     check_update();
-}
-
-// ---------------- Get platform string ----------------
-static const char* get_platform_string() {
-#if defined(__APPLE__)
-    FILE *arch_fp = popen("uname -m", "r");
-    static char platform[64] = {0};
-    if (arch_fp) {
-        char arch[32] = {0};
-        if (fgets(arch, sizeof(arch), arch_fp) != NULL) {
-            arch[strcspn(arch, "\n")] = 0;
-            if (strcmp(arch, "arm64") == 0) {
-                snprintf(platform, sizeof(platform), "darwin-arm64");
-            } else {
-                snprintf(platform, sizeof(platform), "darwin-x86_64");
-            }
-        }
-        pclose(arch_fp);
-    }
-    return platform[0] ? platform : "darwin-x86_64";
-#elif defined(__linux__)
-    return "linux-x86_64";
-#elif defined(_WIN32)
-    return "windows-x64.exe";
-#else
-    return "unknown";
-#endif
 }
 
 // ---------------- Update CLI ----------------
@@ -174,27 +138,6 @@ void update_cli() {
     printf(COLOR_YELLOW "Checking for updates...\n" COLOR_RESET);
 
     char latest_version[64] = {0};
-
-#if defined(_WIN32)
-    // Use PowerShell to get the latest tag_name
-    char ps_cmd[512];
-    snprintf(ps_cmd, sizeof(ps_cmd),
-        "powershell -Command \""
-        "$ErrorActionPreference='Stop'; "
-        "$json=Invoke-RestMethod -Uri 'https://api.github.com/repos/Tydewest/CLI/releases/latest'; "
-        "Write-Output $json.tag_name\"");
-
-    FILE *fp = _popen(ps_cmd, "r");
-    if (!fp) {
-        printf(COLOR_RED "Failed to check latest version.\n" COLOR_RESET);
-        return;
-    }
-    if (fgets(latest_version, sizeof(latest_version), fp) != NULL) {
-        latest_version[strcspn(latest_version, "\n")] = 0;
-    }
-    _pclose(fp);
-#else
-    // macOS / Linux
     FILE *fp = popen(
         "curl -s https://api.github.com/repos/Tydewest/CLI/releases/latest | "
         "grep tag_name | head -n1 | cut -d'\"' -f4", "r");
@@ -206,11 +149,9 @@ void update_cli() {
         latest_version[strcspn(latest_version, "\n")] = 0;
     }
     pclose(fp);
-#endif
 
-    const char *installed = get_installed_version();
-    if (strcmp(latest_version, installed) == 0) {
-        printf(COLOR_GREEN "Dynaserve CLI is already up-to-date (%s).\n" COLOR_RESET, installed);
+    if (strcmp(latest_version, get_installed_version()) == 0) {
+        printf(COLOR_GREEN "Dynaserve CLI is already up-to-date (%s).\n" COLOR_RESET, get_installed_version());
         return;
     }
 
@@ -226,13 +167,9 @@ void update_cli() {
     }
 #elif defined(__linux__)
     ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path)-1);
-    if (len != -1) exe_path[len] = '\0';
-    else {
-        printf(COLOR_RED "Failed to get executable path.\n" COLOR_RESET);
-        return;
-    }
-#elif defined(_WIN32)
-    if (!GetModuleFileNameA(NULL, exe_path, sizeof(exe_path))) {
+    if (len != -1) {
+        exe_path[len] = '\0';
+    } else {
         printf(COLOR_RED "Failed to get executable path.\n" COLOR_RESET);
         return;
     }
@@ -241,23 +178,12 @@ void update_cli() {
     return;
 #endif
 
-    const char *platform = get_platform_string();
-    printf(COLOR_YELLOW "Detected platform: %s\n" COLOR_RESET, platform);
-
-    // ---------------- Download new version ----------------
+    // Construct download URL with platform
+    const char *platform = "darwin-x86_64"; // or dynamically detect
     char download_cmd[1024];
-#if defined(_WIN32)
-    snprintf(download_cmd, sizeof(download_cmd),
-        "powershell -Command \""
-        "$ErrorActionPreference='Stop'; "
-        "Invoke-WebRequest -Uri 'https://github.com/Tydewest/CLI/releases/download/%s/dynaserve-windows-x64.exe' "
-        "-OutFile '%s_new' -UseBasicParsing\"",
-        latest_version, exe_path);
-#else
     snprintf(download_cmd, sizeof(download_cmd),
         "curl -L -o \"%s_new\" https://github.com/Tydewest/CLI/releases/download/%s/dynaserve-%s",
         exe_path, latest_version, platform);
-#endif
 
     printf(COLOR_YELLOW "Downloading new version...\n" COLOR_RESET);
     if (system(download_cmd) != 0) {
@@ -265,8 +191,6 @@ void update_cli() {
         return;
     }
 
-    // ---------------- Replace binary ----------------
-#if !defined(_WIN32)
     char chmod_cmd[512];
     snprintf(chmod_cmd, sizeof(chmod_cmd), "chmod +x \"%s_new\"", exe_path);
     system(chmod_cmd);
@@ -283,21 +207,9 @@ void update_cli() {
         system(replace_cmd);
         return;
     }
-#else
-    char old_backup[PATH_MAX];
-    snprintf(old_backup, sizeof(old_backup), "%s_backup.exe", exe_path);
-    rename(exe_path, old_backup);
 
-    char new_file[PATH_MAX];
-    snprintf(new_file, sizeof(new_file), "%s_new", exe_path);
-    rename(new_file, exe_path);
-#endif
-
-    // ---------------- Write installed version file ----------------
+    // Write installed version file
     const char *home = getenv("HOME");
-#if defined(_WIN32)
-    if (!home) home = getenv("USERPROFILE");
-#endif
     char version_path[PATH_MAX];
     snprintf(version_path, sizeof(version_path), "%s/.dynaserve_version", home);
 
