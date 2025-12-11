@@ -16,8 +16,9 @@ void print_help();
 void greet_user(const char *name);
 void run_server(const char *port);
 void show_version();
-void update_cli(); 
+void update_cli();
 void check_update();
 const char* get_installed_version();
+const char* get_platform_string();
 
 #endif
