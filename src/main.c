@@ -1,5 +1,3 @@
-#include <stdio.h>
-#include <string.h>
 #include "dynaserve.h"
 
 int main(int argc, char *argv[]) {
@@ -23,7 +21,7 @@ int main(int argc, char *argv[]) {
     else if (strcmp(command, "update") == 0) update_cli();
     else {
         printf(COLOR_RED "Unknown command: %s\n" COLOR_RESET, command);
-        printf("Use 'help' to see available commands.\n");
+        printf("Use 'help' or '-h' to see available commands.\n");
         return 1;
     }
 

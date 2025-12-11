@@ -1,16 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <limits.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <time.h>
 #include "dynaserve.h"
-
-#if defined(__APPLE__)
-#include <mach-o/dyld.h>
-#endif
 
 // ---------------- Helpers ----------------
 static char *get_cache_path() {
@@ -50,13 +38,14 @@ static int read_cache(char *version, size_t size) {
     return 1;
 }
 
-// ---------------- Installed version ----------------
+// ---------------- Dynamic installed version ----------------
 const char* get_installed_version() {
     static char version[64] = {0};
     const char *home = getenv("HOME");
+    static char path[PATH_MAX];
+
     if (!home) return "unknown";
 
-    char path[PATH_MAX];
     snprintf(path, sizeof(path), "%s/.dynaserve_version", home);
 
     FILE *fp = fopen(path, "r");
@@ -67,6 +56,21 @@ const char* get_installed_version() {
 
     version[strcspn(version, "\n")] = 0;
     return version;
+}
+
+// ---------------- Platform string ----------------
+const char* get_platform_string() {
+#if defined(__APPLE__) && defined(__MACH__)
+#if defined(__aarch64__)
+    return "darwin-arm64";
+#else
+    return "darwin-x86_64";
+#endif
+#elif defined(__linux__)
+    return "linux-x86_64";
+#else
+    return "unknown";
+#endif
 }
 
 // ---------------- Update check ----------------
@@ -87,7 +91,7 @@ void check_update() {
     }
 
     if (strlen(latest_version) > 0 && strcmp(latest_version, get_installed_version()) != 0) {
-        if (isatty(fileno(stdout))) {
+        if (isatty(fileno(stdout))) { // only print in interactive terminals
             printf("\n");
             printf(COLOR_YELLOW "  ⚠ Dynaserve CLI v%s available! Run %ssudo dynaserve update%s to upgrade\n" COLOR_RESET,
                    latest_version, COLOR_GREEN, COLOR_YELLOW);
@@ -104,6 +108,8 @@ void print_help() {
     printf(COLOR_GREEN "  serve [port]" COLOR_RESET "  Start server on specified port (default 8080)\n");
     printf(COLOR_GREEN "  version" COLOR_RESET "       Show Dynaserve CLI version\n");
     printf(COLOR_GREEN "  update" COLOR_RESET "        Update CLI to latest version\n");
+    printf("Instructions can be found at: https://cli.dynserve.io/manual\n");
+
     check_update();
 }
 
@@ -122,32 +128,10 @@ void show_version() {
     check_update();
 }
 
-// ---------------- Platform string ----------------
-const char* get_platform_string() {
-#if defined(__APPLE__)
-    FILE *arch_fp = popen("uname -m", "r");
-    static char platform[64] = {0};
-    if (arch_fp) {
-        char arch[32] = {0};
-        if (fgets(arch, sizeof(arch), arch_fp) != NULL) {
-            arch[strcspn(arch, "\n")] = 0;
-            if (strcmp(arch, "arm64") == 0) snprintf(platform, sizeof(platform), "darwin-arm64");
-            else snprintf(platform, sizeof(platform), "darwin-x86_64");
-        }
-        pclose(arch_fp);
-    }
-    return platform[0] ? platform : "darwin-arm64";
-#elif defined(__linux__)
-    return "linux-x86_64";
-#else
-    return "unknown";
-#endif
-}
-
 // ---------------- Update CLI ----------------
 void update_cli() {
     const char *cache_file = get_cache_path();
-    remove(cache_file);
+    remove(cache_file); // clear cached version
 
     printf(COLOR_YELLOW "Checking for updates...\n" COLOR_RESET);
 
@@ -171,4 +155,63 @@ void update_cli() {
     }
 
     printf(COLOR_YELLOW "New version available: %s\n" COLOR_RESET, latest_version);
+
+    char exe_path[PATH_MAX] = {0};
+#if defined(__APPLE__)
+    uint32_t size = sizeof(exe_path);
+    if (_NSGetExecutablePath(exe_path, &size) != 0) {
+        printf(COLOR_RED "Failed to get executable path.\n" COLOR_RESET);
+        return;
+    }
+#elif defined(__linux__)
+    ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path)-1);
+    if (len != -1) exe_path[len] = '\0';
+    else {
+        printf(COLOR_RED "Failed to get executable path.\n" COLOR_RESET);
+        return;
+    }
+#endif
+
+    const char *platform = get_platform_string();
+    printf(COLOR_YELLOW "Detected platform: %s\n" COLOR_RESET, platform);
+
+    char download_cmd[1024];
+    snprintf(download_cmd, sizeof(download_cmd),
+        "curl -L -o \"%s_new\" https://github.com/Tydewest/CLI/releases/download/%s/dynaserve-%s",
+        exe_path, latest_version, platform);
+
+    printf(COLOR_YELLOW "Downloading new version...\n" COLOR_RESET);
+    if (system(download_cmd) != 0) {
+        printf(COLOR_RED "Failed to download latest binary.\n" COLOR_RESET);
+        return;
+    }
+
+    char chmod_cmd[512];
+    snprintf(chmod_cmd, sizeof(chmod_cmd), "chmod +x \"%s_new\"", exe_path);
+    system(chmod_cmd);
+
+    char backup_cmd[512];
+    snprintf(backup_cmd, sizeof(backup_cmd), "mv \"%s\" \"%s_backup\"", exe_path, exe_path);
+    system(backup_cmd);
+
+    char replace_cmd[512];
+    snprintf(replace_cmd, sizeof(replace_cmd), "mv \"%s_new\" \"%s\"", exe_path, exe_path);
+    if (system(replace_cmd) != 0) {
+        printf(COLOR_RED "Failed to replace binary. Restoring backup...\n" COLOR_RESET);
+        snprintf(replace_cmd, sizeof(replace_cmd), "mv \"%s_backup\" \"%s\"", exe_path, exe_path);
+        system(replace_cmd);
+        return;
+    }
+
+    const char *home = getenv("HOME");
+    char version_path[PATH_MAX];
+    snprintf(version_path, sizeof(version_path), "%s/.dynaserve_version", home);
+
+    FILE *vfp = fopen(version_path, "w");
+    if (vfp) {
+        fprintf(vfp, "%s\n", latest_version);
+        fclose(vfp);
+    }
+
+    printf(COLOR_GREEN "Dynaserve CLI updated to version %s!\n" COLOR_RESET, latest_version);
 }
