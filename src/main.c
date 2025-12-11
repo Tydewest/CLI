@@ -1,9 +1,8 @@
 #include "dynaserve.h"
 
 int main(int argc, char *argv[]) {
-
     if (argc < 2) {
-        printf(COLOR_RED "No command provided. Use 'help' or '-h' for a list of commands.\n" COLOR_RESET);
+        printf(COLOR_RED "No command provided. Use 'help' or '-h'.\n" COLOR_RESET);
         return 1;
     }
 
@@ -22,7 +21,7 @@ int main(int argc, char *argv[]) {
     else if (strcmp(command, "update") == 0) update_cli();
     else {
         printf(COLOR_RED "Unknown command: %s\n" COLOR_RESET, command);
-        printf("Use 'help' or '-h' to see available commands.\n");
+        printf("Use 'help' to see available commands.\n");
         return 1;
     }
 

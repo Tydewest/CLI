@@ -9,27 +9,31 @@
 #include <sys/stat.h>
 #include <time.h>
 
-#define COLOR_RESET "\x1b[0m"
-#define COLOR_RED   "\x1b[31m"
-#define COLOR_GREEN "\x1b[32m"
-#define COLOR_YELLOW "\x1b[33m"
-#define COLOR_BLUE "\x1b[34m"
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#endif
+
+#define COLOR_RESET   "\033[0m"
+#define COLOR_RED     "\033[31m"
+#define COLOR_GREEN   "\033[32m"
+#define COLOR_YELLOW  "\033[33m"
+#define COLOR_BLUE    "\033[34m"
 
 #define UPDATE_CACHE_FILE ".dynaserve_update_cache"
-#define UPDATE_CACHE_TTL 3600  // 1 hour in seconds
+#define UPDATE_CACHE_TTL  3600 // 1 hour
 
-// Function declarations
+// ---------------- Helpers ----------------
+char* get_cache_path();
+int is_cache_valid();
+void write_cache(const char *version);
+int read_cache(char *version, size_t size);
+const char* get_installed_version();
+
+// ---------------- Commands ----------------
 void print_help();
 void greet_user(const char *name);
 void run_server(const char *port);
 void show_version();
 void update_cli();
-const char* get_installed_version();
-const char* get_platform_string();
-char* get_cache_path();
-int is_cache_valid();
-void write_cache(const char *version);
-int read_cache(char *version, size_t size);
-void check_update();
 
 #endif
